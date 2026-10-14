@@ -1,0 +1,61 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# Инструменты сборки и упаковки
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Тесты и покрытие
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Настройки и секреты ---
+# Файл .env содержит локальные настройки и потенциально секреты.
+# В репозиторий попадает только .env.example.
+.env
+.env.*
+!.env.example
+
+# --- Кэш приложения ---
+# Создаётся во время работы, в репозитории не нужен.
+.cache/
+
+# --- Скриншоты и временные файлы ---
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+!frontend/assets/*.jpg
+!frontend/assets/*.png
+*.pdf
+*.zip
+*.log
+
+# --- Редакторы и ОС ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Node.js (на случай, если появится сборка фронтенда) ---
+node_modules/
+npm-debug.log*
+# --- Node.js (на случай, если появится сборка фронтенда) ---
+node_modules/
+npm-debug.log*

@@ -1,0 +1,839 @@
+/*
+    Оформление интерфейса «Орбитального поста наблюдения».
+
+    Общая идея оформления
+    ----------------------
+    Интерфейс представляет собой приборную панель: тёмный фон,
+    моноширинные надписи, тонкие рамки и подсвеченные числовые
+    значения. Такой стиль соответствует назначению проекта —
+    он ассоциируется с центрами управления полётом и делает
+    акцент на данных, а не на оформлении.
+
+    Переменные оформления вынесены в начало файла, поскольку
+    используются во всех правилах: изменение цвета или отступа
+    выполняется в одном месте.
+*/
+
+:root {
+    /* Основные цвета интерфейса. */
+    --color-background: #05070d;
+    --color-panel: rgba(8, 13, 24, 0.86);
+    --color-panel-border: rgba(90, 170, 255, 0.22);
+    --color-accent: #5ad1ff;
+    --color-accent-dim: #2b6f8f;
+    --color-warning: #ffb454;
+    --color-danger: #ff5f6d;
+    --color-success: #6ee7a8;
+    --color-text: #cfe4f5;
+    --color-text-dim: #6a8399;
+
+    /* Размеры элементов оформления. */
+    --panel-width: 380px;
+    --border-radius: 3px;
+
+    /* Шрифты. Моноширинный используется для числовых значений,
+       чтобы цифры не смещались при обновлении значений. */
+    --font-mono: 'SF Mono', 'Consolas', 'DejaVu Sans Mono', monospace;
+    --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--color-background);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+}
+
+/* ------------------------------------------------------------------ */
+/* Полотно трёхмерной сцены                                            */
+/* ------------------------------------------------------------------ */
+
+#space-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    /* Размеры задаются явно: полотно не является блочным элементом,
+       поэтому растягивание по родителю для него не выполняется.
+       Скрипт ориентируется на clientWidth и clientHeight этого
+       элемента при подгонке камеры под окно. */
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    z-index: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Визирная прицельная сетка                                          */
+/* ------------------------------------------------------------------ */
+
+#hud-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    /* Слой не должен перехватывать щелчки мыши: иначе невозможно
+       было бы вращать сцену мышью. */
+    pointer-events: none;
+}
+
+.hud-corner {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+
+/*
+    Угловые надписи вынесены в просвет между панелями: на краях экрана
+    они перекрывались бы колонками с показаниями приборов.
+*/
+.hud-top-left { top: 24px; left: calc(var(--panel-width) + 24px); }
+.hud-top-right { top: 24px; right: calc(var(--panel-width) + 24px); text-align: right; }
+.hud-bottom-left { bottom: 24px; left: calc(var(--panel-width) + 24px); }
+
+.hud-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--color-accent-dim);
+}
+
+.hud-sub {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--color-accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Главная панель                                                      */
+/* ------------------------------------------------------------------ */
+
+/*
+    Панели занимают края экрана, оставляя посередине просвет под сцену.
+    Обе колонки имеют одинаковую ширину, поэтому планета остаётся
+    точно по центру экрана: смещение центра изображения на симметричную
+    величину компенсируется равными отступами.
+*/
+.panel {
+    position: fixed;
+    top: 0;
+    width: var(--panel-width);
+    height: 100%;
+    z-index: 2;
+    overflow-y: auto;
+    padding: 20px 18px 40px;
+    background: var(--color-panel);
+    backdrop-filter: blur(12px);
+    /* Панель прокручивается независимо от сцены. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-accent-dim) transparent;
+}
+
+#panel-left {
+    left: 0;
+    border-right: 1px solid var(--color-panel-border);
+}
+
+#panel-right {
+    right: 0;
+    border-left: 1px solid var(--color-panel-border);
+}
+
+.panel::-webkit-scrollbar { width: 6px; }
+.panel::-webkit-scrollbar-thumb {
+    background: var(--color-accent-dim);
+    border-radius: 3px;
+}
+
+.panel-header {
+    padding-bottom: 16px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--color-panel-border);
+}
+
+.panel-header h1 {
+    font-family: var(--font-mono);
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    color: var(--color-accent);
+}
+
+.panel-subtitle {
+    margin-top: 6px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--color-text-dim);
+}
+
+/* ------------------------------------------------------------------ */
+/* Модули панели                                                       */
+/* ------------------------------------------------------------------ */
+
+.module {
+    margin-bottom: 22px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(90, 170, 255, 0.1);
+}
+
+.module:last-child { border-bottom: none; }
+
+.module h2 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    color: var(--color-text-dim);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.module-subheading { margin-top: 16px; }
+
+.module-count {
+    font-size: 10px;
+    color: var(--color-accent);
+    padding: 1px 6px;
+    border: 1px solid var(--color-accent-dim);
+    border-radius: 8px;
+}
+
+/* Сообщение о недоступности источника данных. */
+.module-error {
+    padding: 10px 12px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--color-warning);
+    background: rgba(255, 180, 84, 0.07);
+    border-left: 2px solid var(--color-warning);
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Показатели телеметрии                                               */
+/* ------------------------------------------------------------------ */
+
+.telemetry-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 11px;
+    background: rgba(90, 170, 255, 0.05);
+    border: 1px solid rgba(90, 170, 255, 0.12);
+    border-radius: var(--border-radius);
+}
+
+.metric-wide { grid-column: 1 / -1; }
+
+.metric-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-text-dim);
+}
+
+.metric-value {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.15;
+    /* Моноширинный шрифт обеспечивает неподвижность цифр
+       при обновлении значений. */
+    font-variant-numeric: tabular-nums;
+    color: var(--color-accent);
+}
+
+.metric-unit {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--color-text-dim);
+}
+
+/* Состояние освещённости станции окрашивается по уровню. */
+.visibility-daylight { color: var(--color-warning); }
+.visibility-penumbra { color: var(--color-text); }
+.visibility-eclipsed { color: var(--color-accent-dim); }
+
+/* ------------------------------------------------------------------ */
+/* Список экипажа                                                      */
+/* ------------------------------------------------------------------ */
+
+.crew-station {
+    margin-bottom: 14px;
+}
+
+.crew-station-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--color-accent);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.crew-member {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 5px 0;
+}
+
+.crew-photo {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--color-accent-dim);
+    background: rgba(90, 170, 255, 0.08);
+    flex-shrink: 0;
+}
+
+/* Инициалы на месте фотографии: показываются, когда фотография
+   недоступна, чтобы строка не выглядела сломанной. */
+.crew-photo-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--color-text-dim);
+    background: rgba(90, 170, 255, 0.05);
+}
+
+/* Крупная фотография по наведению. Показывается рядом со строкой и
+   исчезает, когда курсор уходит, чтобы не занимать место в панели. */
+.crew-photo-large {
+    position: absolute;
+    z-index: 20;
+    width: 190px;
+    height: 190px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 1px solid var(--color-accent-dim);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.crew-photo-large.is-visible {
+    opacity: 1;
+}
+
+.crew-name {
+    font-size: 12px;
+    color: var(--color-text);
+}
+
+/* ------------------------------------------------------------------ */
+/* Ближайший запуск и расписание                                      */
+/* ------------------------------------------------------------------ */
+
+.next-launch {
+    padding: 14px;
+    margin-bottom: 14px;
+    background: rgba(90, 170, 255, 0.06);
+    border: 1px solid var(--color-panel-border);
+    border-radius: var(--border-radius);
+}
+
+.launch-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 4px;
+}
+
+.launch-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--color-text-dim);
+    line-height: 1.6;
+}
+
+/* Обратный отсчёт до запуска — акцентный элемент панели. */
+.countdown {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-success);
+    margin: 10px 0 2px;
+}
+
+.countdown-imminent { color: var(--color-warning); }
+.countdown-soon { color: var(--color-accent); }
+
+.countdown-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    color: var(--color-text-dim);
+}
+
+.module-hint {
+    margin: -4px 0 8px;
+    font-size: 10px;
+    line-height: 1.4;
+    color: var(--color-text-dim);
+    opacity: 0.75;
+}
+
+.launch-list { display: flex; flex-direction: column; gap: 7px; }
+
+/*
+    Строка расписания построена на нативном элементе раскрытия.
+    Он даёт готовую клавиатурную навигацию и запоминает открытое
+    состояние без дополнительного кода, поэтому сворачивание и разворот
+    выполняются средствами браузера.
+*/
+.launch-item {
+    background: rgba(90, 170, 255, 0.04);
+    border-left: 2px solid var(--color-accent-dim);
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.launch-item[open] {
+    background: rgba(90, 170, 255, 0.1);
+    border-left-color: var(--color-accent);
+}
+
+.launch-item > summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    list-style: none;
+}
+
+/* Стандартный треугольник заменён собственной стрелкой. */
+.launch-item > summary::-webkit-details-marker { display: none; }
+.launch-item > summary::marker { content: ''; }
+
+.launch-item-head {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    min-width: 0;
+    flex: 1;
+}
+
+.launch-item-chevron {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--color-text-dim);
+    flex-shrink: 0;
+    transition: transform 0.2s;
+}
+
+.launch-item[open] .launch-item-chevron { transform: rotate(90deg); }
+
+.launch-item-body {
+    padding: 2px 10px 10px 26px;
+    border-top: 1px solid rgba(90, 170, 255, 0.12);
+    margin-top: 2px;
+}
+
+.launch-detail-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 3px 0;
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+.launch-detail-key {
+    font-family: var(--font-mono);
+    color: var(--color-text-dim);
+    flex-shrink: 0;
+}
+
+.launch-detail-value {
+    color: var(--color-text);
+    text-align: right;
+}
+
+.launch-detail-description {
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(90, 170, 255, 0.1);
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--color-text-dim);
+}
+
+/* Ссылка на площадку запуска. */
+.launch-pad-link {
+    color: var(--color-warning);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    text-align: right;
+}
+
+.launch-pad-link:hover { color: #ffd08a; }
+
+.launch-pad-plain { color: var(--color-text); }
+
+.launch-item-name {
+    font-size: 11px;
+    color: var(--color-text);
+    line-height: 1.35;
+}
+
+.launch-item-rocket {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--color-text-dim);
+    margin-top: 2px;
+}
+
+.launch-item-time {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-accent);
+    white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* Астероиды                                                           */
+/* ------------------------------------------------------------------ */
+
+.asteroid-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.asteroid-stat {
+    padding: 8px;
+    text-align: center;
+    background: rgba(90, 170, 255, 0.05);
+    border: 1px solid rgba(90, 170, 255, 0.12);
+    border-radius: var(--border-radius);
+}
+
+.asteroid-stat-value {
+    font-family: var(--font-mono);
+    font-size: 17px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-accent);
+}
+
+.asteroid-stat-label {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.08em;
+    color: var(--color-text-dim);
+    margin-top: 2px;
+}
+
+.asteroid-list {
+    max-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-accent-dim) transparent;
+}
+
+.asteroid-list::-webkit-scrollbar { width: 5px; }
+.asteroid-list::-webkit-scrollbar-thumb {
+    background: var(--color-accent-dim);
+    border-radius: 3px;
+}
+
+.asteroid-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 9px;
+    background: rgba(90, 170, 255, 0.035);
+    border-radius: var(--border-radius);
+}
+
+.asteroid-item-hazardous {
+    background: rgba(255, 95, 109, 0.09);
+    border-left: 2px solid var(--color-danger);
+}
+
+.asteroid-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text);
+}
+
+.asteroid-class {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--color-text-dim);
+}
+
+/*
+    Строка астероида раскрывается по щелчку и показывает подробные
+    сведения. Как и в расписании запусков, используется нативный
+    элемент раскрытия со всей клавиатурной навигацией браузера.
+*/
+.asteroid-item {
+    cursor: pointer;
+}
+
+.asteroid-item > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    list-style: none;
+}
+
+.asteroid-item > summary::-webkit-details-marker { display: none; }
+.asteroid-item > summary::marker { content: ''; }
+
+.asteroid-item[open] .asteroid-name { color: var(--color-accent); }
+
+.asteroid-body {
+    margin-top: 7px;
+    padding: 8px 10px 2px;
+    border-top: 1px solid rgba(255, 120, 120, 0.2);
+}
+
+.asteroid-fullname {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--color-text-dim);
+    margin-bottom: 6px;
+    word-break: break-word;
+}
+
+.asteroid-subheading {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    color: var(--color-text-dim);
+    margin: 9px 0 3px;
+}
+
+.asteroid-loading {
+    font-size: 10px;
+    color: var(--color-text-dim);
+    padding: 2px 0;
+}
+
+.asteroid-loading-error { color: var(--color-warning); }
+
+.asteroid-diameter {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-accent);
+    white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* Космическая погода                                                  */
+/* ------------------------------------------------------------------ */
+
+.weather-current {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px;
+    background: rgba(90, 170, 255, 0.05);
+    border: 1px solid var(--color-panel-border);
+    border-radius: var(--border-radius);
+}
+
+.weather-kp {
+    font-family: var(--font-mono);
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-success);
+}
+
+.weather-kp-moderate { color: var(--color-warning); }
+.weather-kp-severe { color: var(--color-danger); }
+
+.weather-level {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--color-accent);
+    margin-bottom: 3px;
+}
+
+.weather-detail {
+    font-size: 10px;
+    color: var(--color-text-dim);
+    line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ */
+/* Графики                                                             */
+/* ------------------------------------------------------------------ */
+
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 150px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Кнопка перевода камеры к станции                                    */
+/* ------------------------------------------------------------------ */
+
+#focus-button {
+    position: fixed;
+    right: calc(var(--panel-width) + 24px);
+    bottom: 84px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--color-accent);
+    background: rgba(8, 13, 24, 0.82);
+    border: 1px solid var(--color-panel-border);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+#focus-button:hover {
+    background: rgba(90, 170, 255, 0.14);
+    border-color: var(--color-accent);
+    transform: translateY(-2px);
+}
+
+.focus-icon { font-size: 15px; }
+
+/* ------------------------------------------------------------------ */
+/* Индикатор состояния соединения                                      */
+/* ------------------------------------------------------------------ */
+
+.connection-status {
+    position: fixed;
+    right: calc(var(--panel-width) + 24px);
+    bottom: 24px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--color-text-dim);
+    background: rgba(8, 13, 24, 0.82);
+    border: 1px solid var(--color-panel-border);
+    border-radius: var(--border-radius);
+    backdrop-filter: blur(8px);
+}
+
+.status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-warning);
+    /* Пульсация привлекает внимание при потере соединения. */
+    animation: pulse 1.8s ease-in-out infinite;
+}
+
+.connection-status.is-online .status-dot {
+    background: var(--color-success);
+}
+
+.connection-status.is-online .status-text { color: var(--color-success); }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Адаптация к узким экранам                                           */
+/* ------------------------------------------------------------------ */
+
+/*
+    На узких экранах панель занимает всю ширину и располагается
+    поверх сцены, а трёхмерная сцена остаётся видимой при прокрутке.
+*/
+/*
+    На экранах средней ширины колонки сужаются, чтобы просвет под
+    сцену сохранялся.
+*/
+@media (max-width: 1400px) {
+    :root { --panel-width: 330px; }
+}
+
+/*
+    На узких экранах две колонки не помещаются рядом. Тогда они
+    выстраиваются друг под другом, а страница прокручивается целиком:
+    сцена закреплена сверху и остаётся видимой при чтении показаний.
+*/
+@media (max-width: 900px) {
+    html, body {
+        height: auto;
+        overflow-y: auto;
+    }
+
+    #space-canvas {
+        position: sticky;
+        top: 0;
+        height: 55vh;
+    }
+
+    #hud-overlay { height: 55vh; }
+
+    .panel {
+        position: static;
+        width: 100%;
+        height: auto;
+        border: none;
+        background: rgba(5, 7, 13, 0.94);
+    }
+
+    .hud-top-left,
+    .hud-top-right,
+    .hud-bottom-left,
+    #focus-button { display: none; }
+}

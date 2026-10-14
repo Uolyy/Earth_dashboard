@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Орбитальный пост наблюдения</title>
+
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/style.css">
+
+    <!--
+        Карта соответствий импортов позволяет загружать локальные копии
+        библиотек по их обычным именам. Благодаря этому файлы визуализации
+        обращаются к модулю как к 'three', не указывая путь к файлу,
+        и проект работает без обращения к внешним сетям доставки.
+    -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "/vendor/three.module.js",
+            "three/addons/controls/OrbitControls.js": "/vendor/OrbitControls.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <!--
+        Полотно для трёхмерной сцены. Само изображение формируется
+        средствами WebGL, поэтому элемент остаётся пустым: всё
+        содержимое создаётся сценарием.
+    -->
+    <canvas id="space-canvas"></canvas>
+
+    <!-- Слой визирной прицельной сетки. -->
+    <div id="hud-overlay">
+        <div class="hud-corner hud-top-left">
+            <span class="hud-label">ОРБИТАЛЬНЫЙ ПОСТ НАБЛЮДЕНИЯ</span>
+            <span class="hud-sub" id="hud-clock">--:--:--</span>
+        </div>
+        <div class="hud-corner hud-top-right" id="hud-sources">
+            <span class="hud-label">ИСТОЧНИКИ</span>
+            <span class="hud-sub" id="hud-sources-status">инициализация…</span>
+        </div>
+        <div class="hud-corner hud-bottom-left" id="hud-target">
+            <span class="hud-label">ЦЕЛЬ</span>
+            <span class="hud-sub">МКС · NORAD 25544</span>
+        </div>
+    </div>
+
+    <!--
+        Панели интерфейса.
+
+        Сведения разделены на две колонки по краям экрана, а между ними
+        остаётся просвет для трёхмерной сцены. Такое построение
+        повторяет приём, применяемый в игровых интерфейсах: приборные
+        показания собраны по краям, а центральная часть экрана отдана
+        обзору. Колонки равной ширины, поэтому планета остаётся точно
+        посередине экрана.
+    -->
+    <aside id="panel-left" class="panel">
+        <header class="panel-header">
+            <h1>ОРБИТАЛЬНЫЙ ПОСТ</h1>
+            <p class="panel-subtitle">панель наблюдения за околоземным пространством</p>
+        </header>
+
+        <!--
+            Блок телеметрии станции. Значения обновляются чаще остальных,
+            поскольку положение меняется непрерывно.
+        -->
+        <section class="module" id="module-telemetry">
+            <h2>МЕЖДУНАРОДНАЯ КОСМИЧЕСКАЯ СТАНЦИЯ</h2>
+            <div class="telemetry-grid" id="telemetry-content">
+                <div class="metric">
+                    <span class="metric-label">высота</span>
+                    <span class="metric-value" id="metric-altitude">—</span>
+                    <span class="metric-unit">км</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">скорость</span>
+                    <span class="metric-value" id="metric-speed">—</span>
+                    <span class="metric-unit">км/с</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">широта</span>
+                    <span class="metric-value" id="metric-latitude">—</span>
+                    <span class="metric-unit">°</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">долгота</span>
+                    <span class="metric-value" id="metric-longitude">—</span>
+                    <span class="metric-unit">°</span>
+                </div>
+                <div class="metric metric-wide">
+                    <span class="metric-label">зона обзора</span>
+                    <span class="metric-value" id="metric-footprint">—</span>
+                    <span class="metric-unit">км радиус</span>
+                </div>
+                <div class="metric metric-wide">
+                    <span class="metric-label">освещённость</span>
+                    <span class="metric-value" id="metric-visibility">—</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Блок экипажа. -->
+        <section class="module" id="module-crew">
+            <h2>ЭКИПАЖ <span class="module-count" id="crew-count"></span></h2>
+            <div id="crew-content" class="crew-list"></div>
+        </section>
+
+        <!--
+            Блок расписания запусков с обратным отсчётом.
+            Строки расписания раскрываются по щелчку.
+        -->
+        <section class="module" id="module-launches">
+            <h2>БЛИЖАЙШИЙ ЗАПУСК</h2>
+            <div id="next-launch" class="next-launch"></div>
+            <h2 class="module-subheading">РАСПИСАНИЕ</h2>
+            <p class="module-hint">щелчок по строке раскрывает подробности</p>
+            <div id="launch-list" class="launch-list"></div>
+        </section>
+    </aside>
+
+    <aside id="panel-right" class="panel">
+        <!-- Блок с оценкой сближений астероидов с Землёй. -->
+        <section class="module" id="module-asteroids">
+            <h2>ОКОЛОЗЕМНЫЕ АСТЕРОИДЫ</h2>
+            <div class="asteroid-summary" id="asteroid-summary"></div>
+            <div id="asteroid-list" class="asteroid-list"></div>
+        </section>
+
+        <!-- Блок состояния среды в околоземном пространстве. -->
+        <section class="module" id="module-space-weather">
+            <h2>КОСМИЧЕСКАЯ ПОГОДА</h2>
+            <div class="weather-current" id="weather-current"></div>
+            <h2 class="module-subheading">СОЛНЕЧНЫЙ ЦИКЛ</h2>
+            <div class="chart-container">
+                <canvas id="chart-solar-cycle"></canvas>
+            </div>
+        </section>
+
+        <!-- Блок каталога спутников. -->
+        <section class="module" id="module-satellites">
+            <h2>СПУТНИКИ НА ОРБИТАХ</h2>
+            <div class="chart-container">
+                <canvas id="chart-satellites"></canvas>
+            </div>
+        </section>
+    </aside>
+
+    <!-- Кнопка возврата камеры к станции. -->
+    <button id="focus-button" type="button" title="Перевести камеру к станции">
+        <span class="focus-icon">◎</span>
+        <span class="focus-text">СТАНЦИЯ</span>
+    </button>
+
+    <!-- Служебный индикатор состояния соединения. -->
+    <div id="connection-status" class="connection-status">
+        <span class="status-dot"></span>
+        <span class="status-text">соединение…</span>
+    </div>
+
+    <script src="/vendor/chart.umd.js"></script>
+    <script type="module" src="/js/main.js"></script>
+</body>
+</html>

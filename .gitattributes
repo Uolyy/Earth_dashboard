@@ -1,0 +1,29 @@
+# По умолчанию Git подставляет CRLF в рабочей копии на Windows, и на Linux
+# каждый файл меняется целиком при простой смене настроек. Поэтому в
+# репозитории строки хранятся в LF, а CRLF появляется только при
+# необходимости операционной системе.
+
+* text=auto eol=lf
+
+# Изображения и библиотеки third-party - байты, трогать их нельзя.
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+
+frontend/vendor/*.js binary linguist-vendored
+frontend/vendor/*.min.js binary linguist-vendored
+
+# Текстуры Земли - сторонние данные, помечаем как сгенерированные, чтобы
+# не мешали обзору diff.
+frontend/assets/*.jpg linguist-generated=true
+
+# Вендорный код на GitHub не должен попадать в статистику языков.
+frontend/vendor/ linguist-vendored
+frontend/assets/ linguist-ignored=true
+
+# Python: нормализованные окончания строк.
+*.py text eol=lf
